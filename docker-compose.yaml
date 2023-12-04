@@ -1,0 +1,80 @@
+version: "3.7"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    network_mode: host
+    volumes:
+      - backend:/backend
+    environment:
+      - DEBUG=1
+      - CELERY_BROKER_URL=redis://127.0.0.1:6379
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379
+      - CELERY_TASK_DEFAULT_QUEUE=default
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - CELERY_TASK_SERIALIZER=pickle
+    ports:
+      - "5000:5000"
+      - "11434:11434"
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: worker.Dockerfile
+    container_name: celery_worker
+    network_mode: host
+    environment:
+      - DEBUG=1
+      - CELERY_BROKER=redis://127.0.0.1:6379
+      - CELERY_RESULT_BACKEND=redis://127.0.0.1:6379
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - CELERY_TASK_SERIALIZER=pickle
+    ports:
+      - "11434:11434"
+      - "5000:5000"
+      - '6379:6379'
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:5.0-alpine
+    network_mode: host
+    environment:
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+    ports:
+      - '6379:6379'
+
+  whisper:
+    image: "onerahmet/openai-whisper-asr-webservice:latest"
+    network_mode: host
+    environment:
+      - ASR_MODEL=base
+      - ASR_ENGINE=openai_whisper
+    ports:
+      - "9000:9000"
+    depends_on:
+      - backend
+
+  llama:
+    image: "ollama/ollama:latest"
+    container_name: llama
+    network_mode: host
+    volumes:
+      - model:/model
+    ports:
+      - "11434:11434"
+    depends_on:
+      - backend
+
+volumes:
+  model:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: "$PWD/llama/model"
+  backend:
+    driver: local
